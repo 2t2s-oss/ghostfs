@@ -1,0 +1,69 @@
+# 工作流名称
+name: Compile ghostfs
+
+# 触发条件：推送代码或手动触发
+on:
+  push:
+    branches: [ main ]  # 你的仓库主分支（若不同，可改为 master）
+  workflow_dispatch:  # 允许手动在 GitHub 页面触发
+
+# 定义编译任务
+jobs:
+  build:
+    # 选择云端环境：Ubuntu 22.04（比 24.04 对旧依赖兼容性更好）
+    runs-on: ubuntu-22.04
+
+    steps:
+      # 步骤 1：拉取你 fork 后的仓库代码
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'  # 自动拉取仓库的子模块（关键！）
+
+      # 步骤 2：安装系统基础依赖（编译工具、FUSE、CURL、Boost 等）
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            build-essential \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config \
+            libfuse-dev \
+            libcurl4-openssl-dev \
+            libboost-system-dev \
+            libboost-filesystem-dev \
+            zlib1g-dev \
+            libssl-dev \
+            libncurses-dev \
+            libsqlite3-dev \
+            libreadline-dev \
+            libpcap-dev
+
+      # 步骤 3：源码编译 Python 2.7（Ubuntu 22.04 官方源仍有 Python 2.7，可简化步骤）
+      - name: Install Python 2.7
+        run: |
+          sudo apt install -y python2.7 python2.7-dev
+
+      # 步骤 4：用 CMake 配置并编译 ghostfs
+      - name: Configure and build ghostfs
+        run: |
+          # 创建 build 目录并进入
+          mkdir -p build && cd build
+          # CMake 配置（指定 Python 2.7 路径，避免冲突）
+          cmake \
+            -DPYTHON_EXECUTABLE=/usr/bin/python2.7 \
+            -DPYTHON_INCLUDE_DIR=/usr/include/python2.7 \
+            -DPYTHON_LIBRARY=/usr/lib/x86_64-linux-gnu/libpython2.7.so \
+            ..
+          # 编译（多核心加速）
+          make -j4
+
+      # 步骤 5：将编译好的 ghostfs 可执行文件上传为「产物」（方便下载）
+      - name: Upload compiled ghostfs
+        uses: actions/upload-artifact@v4
+        with:
+          name: ghostfs-linux-x86_64  # 产物名称
+          path: build/src/ghostfs     # 编译好的可执行文件路径（需根据仓库结构调整，若找不到可先在本地用 `find . -name ghostfs` 确认）
+          retention-days: 30          # 产物保留 30 天
